@@ -1,12 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
+	"net/http"
 	"sort"
+	"time"
 )
-
-const defaultArg = "slices"
 
 type lang struct {
 	name string
@@ -14,18 +14,79 @@ type lang struct {
 }
 
 func main() {
-	fmt.Printf("Starting application with %v\n", os.Args)
+	fmt.Println("Starting application")
+	slices()
+	structs()
+}
 
-	arg := defaultArg
-	if len(os.Args) > 1 {
-		arg = os.Args[1]
+type FakePhoto struct {
+	Id          json.RawMessage `json:"id"`
+	Description string          `json:"title"`
+}
+
+type TumblrPhoto struct {
+	Id          json.RawMessage `json:"id"`
+	Description string          `json:"summary"`
+}
+
+type TumblrResponse struct {
+	Response TumblrPosts `json:"response"`
+}
+type TumblrPosts struct {
+	Posts []TumblrPhoto `json:"posts"`
+}
+
+type unifiedPhoto struct {
+	Id          json.RawMessage
+	Description string
+}
+
+func structs() {
+	c := &http.Client{
+		Timeout: 5 * time.Second,
 	}
-	switch arg {
-	case "slices":
-		fallthrough
-	default:
-		slices()
+
+	fp := getFakePhoto(c)
+	fmt.Printf("Fake photo: %+v\n", unifiedPhoto(fp))
+	tp := getTumblrPhoto(c)
+	fmt.Printf("Tumblr photo: %+v\n", unifiedPhoto(tp))
+
+}
+
+func getFakePhoto(c *http.Client) FakePhoto {
+	var fRes []FakePhoto
+	resp, err := c.Get("https://jsonplaceholder.typicode.com/photos")
+	//resp, err := c.Get("https://api.flickr.com/services/rest/?method=flickr.photos.getInfo&api_key=f17639e3d18eca2dea2f321aaf3e2e84&photo_id=32070157923&format=json&nojsoncallback=1")
+	if err != nil {
+		fmt.Printf("Error calling Flickr's API: %v\n", err)
+		return FakePhoto{}
 	}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(&fRes)
+	if err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		return FakePhoto{}
+	}
+	return fRes[0]
+
+}
+
+func getTumblrPhoto(c *http.Client) TumblrPhoto {
+	var tPhoto TumblrResponse
+	resp, err := c.Get("https://api.tumblr.com/v2/blog/pitchersandpoets.tumblr.com/posts/photo?api_key=fuiKNFp9vQFvjLNvx4sUwti4Yb5yGutBN4Xh10LXZhhRKjWlV4&tag=new+york+yankees")
+	if err != nil {
+		fmt.Printf("Error calling Tumblr's API: %v\n", err)
+		return TumblrPhoto{}
+	}
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&tPhoto)
+	if err != nil {
+		fmt.Printf("Error decoding response: %v\n", err)
+		return TumblrPhoto{}
+	}
+
+	return tPhoto.Response.Posts[0]
 }
 
 func slices() {
@@ -61,4 +122,3 @@ func (langs byName) Less(i, j int) bool {
 func (langs byName) Swap(i, j int) {
 	langs[i], langs[j] = langs[j], langs[i]
 }
-
